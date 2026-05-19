@@ -222,6 +222,9 @@ def bot_loop():
 
             # ---- Verificar posición abierta ----
             if risk_manager.open_position is not None:
+                # Actualizar trailing stop antes de verificar salida
+                risk_manager.update_trailing_stop(price)
+            
                 exit_check = check_exit(risk_manager.open_position, price, df)
                 if exit_check["should_exit"]:
                     record = risk_manager.close_trade(price, exit_check["reason"], now)

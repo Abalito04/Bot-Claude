@@ -10,6 +10,7 @@ from order_manager import open_position, close_position, check_oco_status
 import threading
 import time
 import logging
+import os
 
 import config
 from data_fetcher import fetch_klines, fetch_current_price, fetch_24h_stats
@@ -32,6 +33,7 @@ logger = logging.getLogger(__name__)
 #  Estado global (paper trading)
 # ------------------------------------------------------------------
 risk_manager = RiskManager(initial_capital=config.CAPITAL_USDT)
+risk_manager.load_state()
 bot_running  = False
 bot_thread   = None
 last_signal  = {"signal": "FLAT", "timestamp": None}
@@ -187,7 +189,6 @@ def api_trade_close():
 
 @app.route("/api/reset", methods=["POST"])
 def api_reset():
-    """Reinicia el paper trading (capital y historial)."""
     global risk_manager, last_signal, scan_count
     if bot_running:
         return jsonify({"ok": False, "error": "Detené el bot antes de resetear"}), 400
@@ -195,6 +196,10 @@ def api_reset():
     risk_manager = RiskManager(initial_capital=config.CAPITAL_USDT)
     last_signal  = {"signal": "FLAT", "timestamp": None}
     scan_count   = 0
+
+    if os.path.exists("state.json"):
+        os.remove("state.json")   # ← agregar esto
+
     return jsonify({"ok": True, "message": "Paper trading reseteado"})
 
 
@@ -259,6 +264,7 @@ def bot_loop():
                     # Sincronizar el oco_list_id para poder monitorearlo
                     risk_manager.open_position["oco_list_id"] = real_pos.get("oco_list_id")
                     risk_manager.open_position["oco_active"]  = real_pos.get("oco_active", False)
+                    risk_manager.save_state()
 
                     logger.info(
                         f"APERTURA {signal['signal']} | "

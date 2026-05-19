@@ -20,16 +20,21 @@
 from datetime import datetime, date, timedelta
 from typing import Optional
 import config
+import json
+import os
+import logging
 
+COMMISSION_PCT = 0.001
+STATE_FILE     = "state.json"
 
-COMMISSION_PCT = 0.001  # 0.1% por operación (Binance maker/taker)
+logger = logging.getLogger(__name__)
 
 
 class RiskManager:
     def __init__(self, initial_capital: float = config.CAPITAL_USDT):
         self.initial_capital      = initial_capital
         self.current_capital      = initial_capital
-        self.peak_capital         = initial_capital       # para drawdown máximo
+        self.peak_capital         = initial_capital
         self.daily_start_capital  = initial_capital
         self.last_reset_date      = date.today()
 
@@ -42,9 +47,71 @@ class RiskManager:
         self.total_pnl_usdt       = 0.0
         self.total_fees_usdt      = 0.0
 
-        # Circuit breaker
         self.consecutive_losses   = 0
-        self.pause_until          = None                  # datetime | None
+        self.pause_until          = None
+
+    # ------------------------------------------------------------------
+    #  PERSISTENCIA DE ESTADO
+    # ------------------------------------------------------------------
+
+    def save_state(self) -> None:
+        """Persiste el estado crítico en disco (state.json)."""
+        state = {
+            "current_capital":     self.current_capital,
+            "peak_capital":        self.peak_capital,
+            "daily_start_capital": self.daily_start_capital,
+            "last_reset_date":     self.last_reset_date.isoformat(),
+            "open_position":       self.open_position,
+            "total_trades":        self.total_trades,
+            "winning_trades":      self.winning_trades,
+            "losing_trades":       self.losing_trades,
+            "total_pnl_usdt":      self.total_pnl_usdt,
+            "total_fees_usdt":     self.total_fees_usdt,
+            "consecutive_losses":  self.consecutive_losses,
+            "trade_history":       self.trade_history,
+        }
+        try:
+            with open(STATE_FILE, "w") as f:
+                json.dump(state, f, indent=2)
+        except Exception as e:
+            logger.error(f"Error guardando estado: {e}")
+
+    def load_state(self) -> bool:
+        """
+        Carga el estado desde disco si existe.
+        Retorna True si se cargó correctamente.
+        """
+        if not os.path.exists(STATE_FILE):
+            logger.info("No hay state.json — arrancando desde cero.")
+            return False
+        try:
+            with open(STATE_FILE, "r") as f:
+                state = json.load(f)
+
+            self.current_capital     = state["current_capital"]
+            self.peak_capital        = state["peak_capital"]
+            self.daily_start_capital = state["daily_start_capital"]
+            self.last_reset_date     = date.fromisoformat(state["last_reset_date"])
+            self.open_position       = state["open_position"]
+            self.total_trades        = state["total_trades"]
+            self.winning_trades      = state["winning_trades"]
+            self.losing_trades       = state["losing_trades"]
+            self.total_pnl_usdt      = state["total_pnl_usdt"]
+            self.total_fees_usdt     = state["total_fees_usdt"]
+            self.consecutive_losses  = state["consecutive_losses"]
+            self.trade_history       = state["trade_history"]
+
+            if self.open_position:
+                logger.warning(
+                    f"⚠️  Posición abierta recuperada: {self.open_position['side']} "
+                    f"@ {self.open_position['entry_price']} — verificar OCO en Binance"
+                )
+            logger.info(f"Estado cargado — Capital: {self.current_capital} USDT | Trades: {self.total_trades}")
+            return True
+
+        except Exception as e:
+            logger.error(f"Error cargando estado: {e} — arrancando desde cero")
+            return False
 
     # ------------------------------------------------------------------
     #  RESET DIARIO
@@ -56,7 +123,7 @@ class RiskManager:
         if today != self.last_reset_date:
             self.daily_start_capital  = self.current_capital
             self.last_reset_date      = today
-            self.consecutive_losses   = 0   # reset circuit breaker al nuevo día
+            self.consecutive_losses   = 0
             self.pause_until          = None
 
     # ------------------------------------------------------------------
@@ -64,21 +131,11 @@ class RiskManager:
     # ------------------------------------------------------------------
 
     def calculate_position_size(self, entry_price: float) -> dict:
-        """
-        Calcula el tamaño de la posición basado en el riesgo del 1%.
-        Descuenta comisiones del capital en riesgo.
-
-        Fórmula:
-            risk_usdt   = capital × risk_pct
-            position_sz = risk_usdt / (entry_price × stop_loss_pct)
-        """
-        # Descontamos las comisiones de entrada y salida del riesgo disponible
-        fee_entry   = entry_price * COMMISSION_PCT
-        risk_usdt   = self.current_capital * config.RISK_PER_TRADE
+        fee_entry      = entry_price * COMMISSION_PCT
+        risk_usdt      = self.current_capital * config.RISK_PER_TRADE
         position_size  = risk_usdt / (entry_price * config.STOP_LOSS_PCT)
         position_value = position_size * entry_price
 
-        # Trailing stop se activa cuando el precio recorre 50% del TP
         trailing_activation_long  = round(entry_price * (1 + config.TAKE_PROFIT_PCT * 0.5), 4)
         trailing_activation_short = round(entry_price * (1 - config.TAKE_PROFIT_PCT * 0.5), 4)
 
@@ -101,16 +158,8 @@ class RiskManager:
     # ------------------------------------------------------------------
 
     def can_open_trade(self) -> dict:
-        """
-        Verifica si se puede abrir una nueva operación.
-
-        Returns dict con:
-            allowed : bool
-            reason  : str | None
-        """
         self._check_daily_reset()
 
-        # Circuit breaker activo
         if self.pause_until and datetime.now() < self.pause_until:
             remaining = (self.pause_until - datetime.now()).seconds // 60
             return {
@@ -118,11 +167,9 @@ class RiskManager:
                 "reason": f"Circuit breaker activo — pausa de {remaining} min restantes (3 pérdidas consecutivas)"
             }
 
-        # Ya hay una posición abierta
         if self.open_position is not None:
             return {"allowed": False, "reason": "Ya hay una posición abierta"}
 
-        # Límite de pérdida diaria
         daily_loss = (self.daily_start_capital - self.current_capital) / self.daily_start_capital
         if daily_loss >= config.MAX_DAILY_LOSS:
             return {
@@ -130,7 +177,6 @@ class RiskManager:
                 "reason": f"Límite de pérdida diaria alcanzado ({daily_loss*100:.2f}%)"
             }
 
-        # Drawdown máximo acumulado desde el pico (10%)
         drawdown = (self.peak_capital - self.current_capital) / self.peak_capital
         if drawdown >= 0.10:
             return {
@@ -138,7 +184,6 @@ class RiskManager:
                 "reason": f"Drawdown máximo alcanzado ({drawdown*100:.2f}% desde el pico)"
             }
 
-        # Capital mínimo absoluto
         if self.current_capital < 10:
             return {"allowed": False, "reason": "Capital insuficiente (< 10 USDT)"}
 
@@ -149,21 +194,11 @@ class RiskManager:
     # ------------------------------------------------------------------
 
     def open_trade(self, side: str, entry_price: float, timestamp: str) -> dict:
-        """
-        Registra la apertura de una posición y descuenta la comisión de entrada.
-
-        Parameters
-        ----------
-        side        : 'LONG' | 'SHORT'
-        entry_price : precio de entrada
-        timestamp   : timestamp de la señal
-        """
         sizing = self.calculate_position_size(entry_price)
         tp = sizing["tp_price_long"]  if side == "LONG"  else sizing["tp_price_short"]
         sl = sizing["sl_price_long"]  if side == "LONG"  else sizing["sl_price_short"]
         trailing_activation = sizing["trailing_activation_long"] if side == "LONG" else sizing["trailing_activation_short"]
 
-        # Descontar comisión de entrada
         fee_entry = sizing["position_value_usdt"] * COMMISSION_PCT
         self.current_capital  -= fee_entry
         self.total_fees_usdt  += fee_entry
@@ -180,19 +215,18 @@ class RiskManager:
             "trailing_active":     False,
             "open_timestamp":      timestamp,
             "fee_entry":           round(fee_entry, 4),
+            "oco_list_id":         None,
+            "oco_active":          False,
         }
 
+        self.save_state()
         return self.open_position
 
     # ------------------------------------------------------------------
-    #  ACTUALIZAR TRAILING STOP (llamar en cada vela)
+    #  ACTUALIZAR TRAILING STOP
     # ------------------------------------------------------------------
 
     def update_trailing_stop(self, current_price: float) -> None:
-        """
-        Mueve el stop loss a breakeven cuando el precio alcanza el 50% del TP.
-        Llamar en cada nueva vela mientras hay posición abierta.
-        """
         if self.open_position is None:
             return
 
@@ -200,24 +234,20 @@ class RiskManager:
         side = pos["side"]
 
         if not pos["trailing_active"]:
-            if side == "LONG"  and current_price >= pos["trailing_activation"]:
-                # Mover SL a breakeven (precio entrada + comisiones)
-                pos["stop_loss"]      = round(pos["entry_price"] * (1 + COMMISSION_PCT * 2), 4)
+            if side == "LONG" and current_price >= pos["trailing_activation"]:
+                pos["stop_loss"]       = round(pos["entry_price"] * (1 + COMMISSION_PCT * 2), 4)
                 pos["trailing_active"] = True
+                self.save_state()
             elif side == "SHORT" and current_price <= pos["trailing_activation"]:
-                pos["stop_loss"]      = round(pos["entry_price"] * (1 - COMMISSION_PCT * 2), 4)
+                pos["stop_loss"]       = round(pos["entry_price"] * (1 - COMMISSION_PCT * 2), 4)
                 pos["trailing_active"] = True
+                self.save_state()
 
     # ------------------------------------------------------------------
     #  CIERRE DE POSICIÓN
     # ------------------------------------------------------------------
 
     def close_trade(self, exit_price: float, exit_reason: str, timestamp: str) -> dict:
-        """
-        Cierra la posición abierta, descuenta comisión de salida y actualiza capital.
-
-        Returns dict con el registro completo de la operación.
-        """
         if self.open_position is None:
             raise ValueError("No hay posición abierta para cerrar")
 
@@ -226,27 +256,22 @@ class RiskManager:
         entry = pos["entry_price"]
         size  = pos["position_size"]
 
-        # PnL correcto: diferencia de precio × cantidad (no porcentaje × valor nominal)
         if side == "LONG":
             pnl_usdt = (exit_price - entry) * size
         else:
             pnl_usdt = (entry - exit_price) * size
 
-        # Comisión de salida
         fee_exit = exit_price * size * COMMISSION_PCT
         pnl_usdt -= fee_exit
         self.total_fees_usdt += fee_exit
 
-        # Actualizar capital (con guard: mínimo 0)
         self.current_capital = max(0.0, self.current_capital + pnl_usdt)
         self.total_pnl_usdt += pnl_usdt
         self.total_trades   += 1
 
-        # Actualizar peak capital
         if self.current_capital > self.peak_capital:
             self.peak_capital = self.current_capital
 
-        # Circuit breaker
         if pnl_usdt > 0:
             self.winning_trades      += 1
             self.consecutive_losses   = 0
@@ -259,24 +284,25 @@ class RiskManager:
         pnl_pct = ((exit_price - entry) / entry) if side == "LONG" else ((entry - exit_price) / entry)
 
         trade_record = {
-            "id":             self.total_trades,
-            "side":           side,
-            "entry_price":    round(entry, 4),
-            "exit_price":     round(exit_price, 4),
-            "position_size":  size,
-            "pnl_pct":        round(pnl_pct * 100, 3),
-            "pnl_usdt":       round(pnl_usdt, 2),
-            "fee_total":      round(pos["fee_entry"] + fee_exit, 4),
-            "capital_after":  round(self.current_capital, 2),
-            "trailing_used":  pos["trailing_active"],
-            "exit_reason":    exit_reason,
-            "open_time":      pos["open_timestamp"],
-            "close_time":     timestamp,
+            "id":            self.total_trades,
+            "side":          side,
+            "entry_price":   round(entry, 4),
+            "exit_price":    round(exit_price, 4),
+            "position_size": size,
+            "pnl_pct":       round(pnl_pct * 100, 3),
+            "pnl_usdt":      round(pnl_usdt, 2),
+            "fee_total":     round(pos["fee_entry"] + fee_exit, 4),
+            "capital_after": round(self.current_capital, 2),
+            "trailing_used": pos["trailing_active"],
+            "exit_reason":   exit_reason,
+            "open_time":     pos["open_timestamp"],
+            "close_time":    timestamp,
         }
 
         self.trade_history.append(trade_record)
         self.open_position = None
 
+        self.save_state()
         return trade_record
 
     # ------------------------------------------------------------------
@@ -284,7 +310,6 @@ class RiskManager:
     # ------------------------------------------------------------------
 
     def get_stats(self) -> dict:
-        """Retorna un resumen completo del rendimiento."""
         self._check_daily_reset()
 
         win_rate   = (self.winning_trades / self.total_trades * 100

@@ -6,6 +6,7 @@
 from flask import Flask, jsonify, render_template, request
 from flask_cors import CORS
 from datetime import datetime, timezone
+from order_manager import open_position, close_position, check_oco_status
 import threading
 import time
 import logging
@@ -203,47 +204,68 @@ def api_reset():
 
 def bot_loop():
     """
-    Loop principal del bot (paper trading).
-    Se ejecuta cada vez que cierra una vela de 5 minutos.
+    Loop principal del bot.
+    Detecta señales y ejecuta órdenes reales en Binance (con OCO automático).
     """
     global last_signal, last_error, scan_count
 
-    logger.info("Bot loop iniciado — esperando cierre de vela...")
+    logger.info("Bot loop iniciado — esperando señal...")
 
     while bot_running:
         try:
             df     = fetch_klines()
             signal = generate_signal(df)
             price  = fetch_current_price()
-            now = datetime.now(timezone.utc).isoformat()
+            now    = datetime.now(timezone.utc).isoformat()
 
             last_signal = {"signal": signal["signal"], "timestamp": now}
             scan_count += 1
 
             # ---- Verificar posición abierta ----
             if risk_manager.open_position is not None:
-                # Actualizar trailing stop antes de verificar salida
                 risk_manager.update_trailing_stop(price)
 
-                exit_check = check_exit(risk_manager.open_position, price, df)
-                if exit_check["should_exit"]:
-                    record = risk_manager.close_trade(price, exit_check["reason"], now)
+                # 1. Verificar si Binance ya ejecutó el OCO (TP o SL automático)
+                oco = check_oco_status(risk_manager.open_position)
+                if oco["executed"]:
+                    record = risk_manager.close_trade(oco["fill_price"], oco["reason"], now)
                     logger.info(
-                        f"CIERRE {record['side']} | "
-                        f"Motivo: {record['exit_reason']} | "
+                        f"OCO EJECUTADO: {oco['reason'].upper()} | "
                         f"PnL: {record['pnl_usdt']:+.2f} USDT ({record['pnl_pct']:+.2f}%)"
                     )
+
+                else:
+                    # 2. Verificar señal de salida de la estrategia (ej: señal contraria)
+                    exit_check = check_exit(risk_manager.open_position, price, df)
+                    if exit_check["should_exit"]:
+                        close_position(risk_manager.open_position, exit_check["reason"])
+                        record = risk_manager.close_trade(price, exit_check["reason"], now)
+                        logger.info(
+                            f"CIERRE {record['side']} | "
+                            f"Motivo: {record['exit_reason']} | "
+                            f"PnL: {record['pnl_usdt']:+.2f} USDT ({record['pnl_pct']:+.2f}%)"
+                        )
 
             # ---- Verificar señal de entrada ----
             elif signal["signal"] in ("LONG", "SHORT"):
                 check = risk_manager.can_open_trade()
                 if check["allowed"]:
-                    position = risk_manager.open_trade(signal["signal"], price, now)
+                    # Abrir orden real en Binance (MARKET + OCO automático)
+                    real_pos = open_position(signal["signal"], risk_manager.current_capital)
+                    # Registrar en risk_manager con el precio real de ejecución
+                    position = risk_manager.open_trade(
+                        signal["signal"], real_pos["entry_price"], now
+                    )
+                    # Sincronizar el oco_list_id para poder monitorearlo
+                    risk_manager.open_position["oco_list_id"] = real_pos.get("oco_list_id")
+                    risk_manager.open_position["oco_active"]  = real_pos.get("oco_active", False)
+
                     logger.info(
                         f"APERTURA {signal['signal']} | "
-                        f"Precio: {price} | "
-                        f"Tamaño: {position['position_size']} SOL | "
-                        f"TP: {position['take_profit']} | SL: {position['stop_loss']}"
+                        f"Precio: {real_pos['entry_price']} | "
+                        f"Tamaño: {real_pos['quantity']} SOL | "
+                        f"TP: {real_pos['take_profit']} | SL: {real_pos['stop_loss']} | "
+                        f"OCO: {real_pos.get('oco_list_id')}"
                     )
                 else:
                     logger.warning(f"No se puede operar: {check['reason']}")
@@ -256,14 +278,13 @@ def bot_loop():
             last_error = str(e)
             logger.error(f"Error en bot loop: {e}")
 
-        # Esperar 60 segundos entre escaneos (5m timeframe ≈ revisar cada minuto)
+        # Esperar 60 segundos entre escaneos
         for _ in range(60):
             if not bot_running:
                 break
             time.sleep(1)
 
     logger.info("Bot loop finalizado.")
-
 
 # ------------------------------------------------------------------
 #  MAIN

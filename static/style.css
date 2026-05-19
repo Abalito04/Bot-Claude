@@ -42,7 +42,7 @@ html, body {
   background: var(--bg-base);
   color: var(--text-primary);
   font-family: var(--font-mono);
-  font-size: 13px;
+  font-size: 15px;
   overflow-x: hidden;
 }
 
@@ -248,7 +248,7 @@ body::before {
 /* ── MAIN GRID ── */
 .main-grid {
   display: grid;
-  grid-template-columns: 220px 1fr 220px;
+  grid-template-columns: 400px 1fr 400px;
   gap: 1rem;
   padding: 1rem 1rem 2rem;
   min-height: calc(100vh - 100px);
@@ -286,8 +286,8 @@ body::before {
   align-items: center;
   padding: .25rem 0;
 }
-.stat-label { color: var(--text-secondary); font-size: .7rem; }
-.stat-value { font-size: .75rem; font-weight: 700; }
+.stat-label { color: var(--text-secondary); font-size: 1.5rem; }
+.stat-value { font-size: 1.5rem; font-weight: 700; }
 .stat-value.positive { color: var(--green); }
 .stat-value.negative { color: var(--red); }
 .stat-value.neutral  { color: var(--neutral); }
@@ -298,8 +298,8 @@ body::before {
   justify-content: space-between;
   padding: .2rem 0;
 }
-.ind-name  { color: var(--text-secondary); font-size: .7rem; }
-.ind-value { font-size: .75rem; color: var(--cyan); font-weight: 700; }
+.ind-name  { color: var(--text-secondary); font-size: 1.5rem; }
+.ind-value { font-size: 1.5rem; color: var(--cyan); font-weight: 700; }
 
 /* RSI Bar */
 .rsi-bar-wrap { margin: .4rem 0 .6rem; }
@@ -348,7 +348,7 @@ body::before {
   min-width: 14px;
   text-align: center;
 }
-.cond-text { font-size: .68rem; color: var(--text-secondary); }
+.cond-text { font-size: 1.5rem; color: var(--text-secondary); }
 
 .condition-item.met .cond-icon { color: var(--green); }
 .condition-item.met .cond-text { color: var(--text-primary); }
@@ -530,5 +530,10 @@ body::before {
   .sidebar-left .card, .sidebar-right .card {
     flex: 1 1 200px;
     margin-bottom: 0;
+  }
+}
+@media (max-width: 1400px) {
+  .main-grid {
+    grid-template-columns: 260px 1fr 260px;
   }
 }

@@ -1,0 +1,325 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>SOL Momentum Surge — Scalper Dashboard</title>
+
+  <!-- Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Syne:wght@400;600;800&display=swap" rel="stylesheet" />
+
+  <!-- Chart.js -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chartjs-chart-financial@0.1.1/dist/chartjs-chart-financial.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/luxon@3.4.4/build/global/luxon.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-luxon@1.3.1/dist/chartjs-adapter-luxon.umd.min.js"></script>
+
+  <link rel="stylesheet" href="/static/css/style.css" />
+</head>
+<body>
+
+  <!-- ══════════════ HEADER ══════════════ -->
+  <header class="header">
+    <div class="header-left">
+      <div class="logo-mark">
+        <span class="logo-icon">◈</span>
+        <div class="logo-text">
+          <span class="logo-title">SOL Momentum Surge</span>
+          <span class="logo-sub">Scalper · 5m · SOL/USDT</span>
+        </div>
+      </div>
+    </div>
+    <div class="header-center">
+      <div class="price-hero">
+        <span id="current-price" class="price-value">—</span>
+        <span id="price-change" class="price-change neutral">—</span>
+      </div>
+    </div>
+    <div class="header-right">
+      <div class="bot-controls">
+        <div class="status-pill" id="bot-status-pill">
+          <span class="status-dot" id="status-dot"></span>
+          <span id="bot-status-text">DETENIDO</span>
+        </div>
+        <button class="btn btn-start" id="btn-start">▶ INICIAR</button>
+        <button class="btn btn-stop" id="btn-stop" disabled>■ DETENER</button>
+      </div>
+    </div>
+  </header>
+
+  <!-- ══════════════ SIGNAL BANNER ══════════════ -->
+  <div class="signal-banner" id="signal-banner">
+    <div class="signal-label">SEÑAL ACTUAL</div>
+    <div class="signal-value" id="signal-value">ANALIZANDO...</div>
+    <div class="signal-time" id="signal-time">—</div>
+  </div>
+
+  <!-- ══════════════ MAIN GRID ══════════════ -->
+  <main class="main-grid">
+
+    <!-- ── COLUMNA IZQUIERDA ── -->
+    <aside class="sidebar-left">
+
+      <!-- Stats de mercado -->
+      <section class="card market-stats">
+        <h3 class="card-title">MERCADO 24H</h3>
+        <div class="stat-row">
+          <span class="stat-label">Máximo</span>
+          <span class="stat-value positive" id="high-24h">—</span>
+        </div>
+        <div class="stat-row">
+          <span class="stat-label">Mínimo</span>
+          <span class="stat-value negative" id="low-24h">—</span>
+        </div>
+        <div class="stat-row">
+          <span class="stat-label">Volumen SOL</span>
+          <span class="stat-value" id="vol-24h">—</span>
+        </div>
+        <div class="stat-row">
+          <span class="stat-label">Cambio %</span>
+          <span class="stat-value" id="change-24h">—</span>
+        </div>
+      </section>
+
+      <!-- Indicadores actuales -->
+      <section class="card indicators-card">
+        <h3 class="card-title">INDICADORES</h3>
+
+        <div class="indicator-group">
+          <span class="ind-name">EMA 9</span>
+          <span class="ind-value" id="ind-ema-fast">—</span>
+        </div>
+        <div class="indicator-group">
+          <span class="ind-name">EMA 21</span>
+          <span class="ind-value" id="ind-ema-slow">—</span>
+        </div>
+        <div class="separator"></div>
+        <div class="indicator-group">
+          <span class="ind-name">RSI 14</span>
+          <span class="ind-value" id="ind-rsi">—</span>
+        </div>
+        <div class="rsi-bar-wrap">
+          <div class="rsi-bar-track">
+            <div class="rsi-bar-fill" id="rsi-bar"></div>
+            <div class="rsi-zone-line" style="left:55%"></div>
+            <div class="rsi-zone-line" style="left:45%"></div>
+          </div>
+          <div class="rsi-labels">
+            <span>0</span><span>45</span><span>55</span><span>100</span>
+          </div>
+        </div>
+        <div class="separator"></div>
+        <div class="indicator-group">
+          <span class="ind-name">MACD</span>
+          <span class="ind-value" id="ind-macd">—</span>
+        </div>
+        <div class="indicator-group">
+          <span class="ind-name">Signal</span>
+          <span class="ind-value" id="ind-macd-sig">—</span>
+        </div>
+        <div class="separator"></div>
+        <div class="indicator-group">
+          <span class="ind-name">Vol. Ratio</span>
+          <span class="ind-value" id="ind-vol-ratio">—</span>
+        </div>
+      </section>
+
+      <!-- Condiciones -->
+      <section class="card conditions-card">
+        <h3 class="card-title">CONDICIONES LONG</h3>
+        <div class="condition-item" id="cond-golden">
+          <span class="cond-icon">○</span>
+          <span class="cond-text">Golden Cross EMA</span>
+        </div>
+        <div class="condition-item" id="cond-rsi-up">
+          <span class="cond-icon">○</span>
+          <span class="cond-text">RSI > 55</span>
+        </div>
+        <div class="condition-item" id="cond-rsi-ob">
+          <span class="cond-icon">○</span>
+          <span class="cond-text">RSI < 75 (no OB)</span>
+        </div>
+        <div class="condition-item" id="cond-vol-l">
+          <span class="cond-icon">○</span>
+          <span class="cond-text">Volumen ≥ 1.5x</span>
+        </div>
+        <div class="condition-item" id="cond-macd-l">
+          <span class="cond-icon">○</span>
+          <span class="cond-text">MACD Alcista</span>
+        </div>
+
+        <h3 class="card-title" style="margin-top:1rem">CONDICIONES SHORT</h3>
+        <div class="condition-item" id="cond-death">
+          <span class="cond-icon">○</span>
+          <span class="cond-text">Death Cross EMA</span>
+        </div>
+        <div class="condition-item" id="cond-rsi-dn">
+          <span class="cond-icon">○</span>
+          <span class="cond-text">RSI < 45</span>
+        </div>
+        <div class="condition-item" id="cond-rsi-os">
+          <span class="cond-icon">○</span>
+          <span class="cond-text">RSI > 25 (no OS)</span>
+        </div>
+        <div class="condition-item" id="cond-vol-s">
+          <span class="cond-icon">○</span>
+          <span class="cond-text">Volumen ≥ 1.5x</span>
+        </div>
+        <div class="condition-item" id="cond-macd-s">
+          <span class="cond-icon">○</span>
+          <span class="cond-text">MACD Bajista</span>
+        </div>
+      </section>
+
+    </aside>
+
+    <!-- ── COLUMNA CENTRAL (gráficos) ── -->
+    <div class="chart-area">
+
+      <!-- Posición abierta -->
+      <div class="open-position-bar" id="open-pos-bar" style="display:none">
+        <span class="pos-badge" id="pos-badge">LONG</span>
+        <span class="pos-info">Entrada: <b id="pos-entry">—</b></span>
+        <span class="pos-info">Tamaño: <b id="pos-size">—</b> SOL</span>
+        <span class="pos-info">TP: <b id="pos-tp" class="positive">—</b></span>
+        <span class="pos-info">SL: <b id="pos-sl" class="negative">—</b></span>
+        <span class="pos-info">PnL: <b id="pos-pnl">—</b></span>
+        <button class="btn btn-close-trade" id="btn-close-trade">✕ CERRAR</button>
+      </div>
+
+      <!-- Gráfico de precio + EMAs -->
+      <div class="chart-box">
+        <div class="chart-header">
+          <span>PRECIO · EMA 9/21</span>
+          <span class="chart-tag">SOL/USDT · 5m</span>
+        </div>
+        <div class="chart-canvas-wrap">
+          <canvas id="price-chart"></canvas>
+        </div>
+      </div>
+
+      <!-- Gráfico RSI -->
+      <div class="chart-box chart-box-sm">
+        <div class="chart-header">
+          <span>RSI 14</span>
+          <span class="chart-tag">Zonas: 25 / 45 / 55 / 75</span>
+        </div>
+        <div class="chart-canvas-wrap">
+          <canvas id="rsi-chart"></canvas>
+        </div>
+      </div>
+
+      <!-- Gráfico MACD -->
+      <div class="chart-box chart-box-sm">
+        <div class="chart-header">
+          <span>MACD (12,26,9)</span>
+          <span class="chart-tag">Line · Signal · Histogram</span>
+        </div>
+        <div class="chart-canvas-wrap">
+          <canvas id="macd-chart"></canvas>
+        </div>
+      </div>
+
+      <!-- Gráfico Volumen -->
+      <div class="chart-box chart-box-sm">
+        <div class="chart-header">
+          <span>VOLUMEN · SMA 20</span>
+          <span class="chart-tag">Ratio actual: <span id="vol-ratio-tag">—</span></span>
+        </div>
+        <div class="chart-canvas-wrap">
+          <canvas id="volume-chart"></canvas>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- ── COLUMNA DERECHA ── -->
+    <aside class="sidebar-right">
+
+      <!-- Portfolio -->
+      <section class="card portfolio-card">
+        <h3 class="card-title">PORTFOLIO</h3>
+        <div class="capital-display">
+          <div class="capital-label">Capital</div>
+          <div class="capital-value" id="capital-value">—</div>
+        </div>
+        <div class="stat-row">
+          <span class="stat-label">PnL Total</span>
+          <span class="stat-value" id="pnl-total">—</span>
+        </div>
+        <div class="stat-row">
+          <span class="stat-label">PnL Diario</span>
+          <span class="stat-value" id="pnl-daily">—</span>
+        </div>
+        <div class="stat-row">
+          <span class="stat-label">Límite pérdida</span>
+          <span class="stat-value neutral">3.0%</span>
+        </div>
+        <div class="separator"></div>
+        <div class="stat-row">
+          <span class="stat-label">Win Rate</span>
+          <span class="stat-value positive" id="win-rate">—</span>
+        </div>
+        <div class="stat-row">
+          <span class="stat-label">Total trades</span>
+          <span class="stat-value" id="total-trades">—</span>
+        </div>
+        <div class="stat-row">
+          <span class="stat-label">Ganadores</span>
+          <span class="stat-value positive" id="win-trades">—</span>
+        </div>
+        <div class="stat-row">
+          <span class="stat-label">Perdedores</span>
+          <span class="stat-value negative" id="lose-trades">—</span>
+        </div>
+        <div class="stat-row">
+          <span class="stat-label">Risk/Reward</span>
+          <span class="stat-value" id="risk-reward">1:1.87</span>
+        </div>
+        <div class="separator"></div>
+        <div class="manual-controls">
+          <h4 class="card-title" style="margin-bottom:.5rem">MANUAL</h4>
+          <div class="btn-row">
+            <button class="btn btn-long" id="btn-long">▲ LONG</button>
+            <button class="btn btn-short" id="btn-short">▼ SHORT</button>
+          </div>
+          <button class="btn btn-reset" id="btn-reset">↺ RESET</button>
+        </div>
+      </section>
+
+      <!-- Trade history -->
+      <section class="card history-card">
+        <h3 class="card-title">HISTORIAL</h3>
+        <div class="trade-list" id="trade-list">
+          <div class="trade-empty">Sin operaciones aún</div>
+        </div>
+      </section>
+
+      <!-- Escaneos -->
+      <section class="card scan-card">
+        <h3 class="card-title">SISTEMA</h3>
+        <div class="stat-row">
+          <span class="stat-label">Escaneos</span>
+          <span class="stat-value" id="scan-count">0</span>
+        </div>
+        <div class="stat-row">
+          <span class="stat-label">Último error</span>
+          <span class="stat-value negative" id="last-error">—</span>
+        </div>
+        <div class="stat-row">
+          <span class="stat-label">Actualización</span>
+          <span class="stat-value" id="last-update">—</span>
+        </div>
+      </section>
+
+    </aside>
+  </main>
+
+  <!-- ══════════════ NOTIFICATION TOAST ══════════════ -->
+  <div class="toast-container" id="toast-container"></div>
+
+  <script src="/static/js/main.js"></script>
+</body>
+</html>

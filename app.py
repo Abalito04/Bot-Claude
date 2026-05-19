@@ -5,7 +5,7 @@
 
 from flask import Flask, jsonify, render_template, request
 from flask_cors import CORS
-from datetime import datetime
+from datetime import datetime, timezone
 import threading
 import time
 import logging
@@ -164,7 +164,7 @@ def api_trade_open():
 
     try:
         price    = fetch_current_price()
-        position = risk_manager.open_trade(side, price, datetime.utcnow().isoformat())
+        position = risk_manager.open_trade(side, price, datetime.now(timezone.utc).isoformat())
         return jsonify({"ok": True, "position": position})
     except Exception as e:
         return jsonify({"ok": False, "error": str(e)}), 500
@@ -178,7 +178,7 @@ def api_trade_close():
 
     try:
         price  = fetch_current_price()
-        record = risk_manager.close_trade(price, "manual", datetime.utcnow().isoformat())
+        record = risk_manager.close_trade(price, "manual", datetime.now(timezone.utc).isoformat())
         return jsonify({"ok": True, "trade": record})
     except Exception as e:
         return jsonify({"ok": False, "error": str(e)}), 500
@@ -215,7 +215,7 @@ def bot_loop():
             df     = fetch_klines()
             signal = generate_signal(df)
             price  = fetch_current_price()
-            now    = datetime.utcnow().isoformat()
+            now = datetime.now(timezone.utc).isoformat()
 
             last_signal = {"signal": signal["signal"], "timestamp": now}
             scan_count += 1
@@ -224,7 +224,7 @@ def bot_loop():
             if risk_manager.open_position is not None:
                 # Actualizar trailing stop antes de verificar salida
                 risk_manager.update_trailing_stop(price)
-            
+
                 exit_check = check_exit(risk_manager.open_position, price, df)
                 if exit_check["should_exit"]:
                     record = risk_manager.close_trade(price, exit_check["reason"], now)

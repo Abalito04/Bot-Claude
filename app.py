@@ -34,6 +34,23 @@ logger = logging.getLogger(__name__)
 # ------------------------------------------------------------------
 risk_manager = RiskManager(initial_capital=config.CAPITAL_USDT)
 risk_manager.load_state()
+
+# Configuración en memoria (Railway compatible)
+dynamic_config = {
+    "ema_fast": config.EMA_FAST,
+    "ema_slow": config.EMA_SLOW,
+    "rsi_period": config.RSI_PERIOD,
+    "rsi_long_min": config.RSI_LONG_MIN,
+    "rsi_short_max": config.RSI_SHORT_MAX,
+    "rsi_overbought": config.RSI_OVERBOUGHT,
+    "rsi_oversold": config.RSI_OVERSOLD,
+    "volume_mult": config.VOLUME_MULT,
+    "take_profit_pct": config.TAKE_PROFIT_PCT,
+    "stop_loss_pct": config.STOP_LOSS_PCT,
+    "risk_per_trade": config.RISK_PER_TRADE,
+    "capital_usdt": config.CAPITAL_USDT
+}
+
 bot_running  = False
 bot_thread   = None
 last_signal  = {"signal": "FLAT", "timestamp": None}
@@ -79,16 +96,7 @@ def api_status():
                 "volume_24h":      round(stats["volume_24h"], 2),
             },
             "portfolio": rm_stats,
-            "config": {
-                "interval":        config.INTERVAL,
-                "ema_fast":        config.EMA_FAST,
-                "ema_slow":        config.EMA_SLOW,
-                "rsi_period":      config.RSI_PERIOD,
-                "volume_mult":     config.VOLUME_MULT,
-                "take_profit_pct": config.TAKE_PROFIT_PCT * 100,
-                "stop_loss_pct":   config.STOP_LOSS_PCT * 100,
-                "risk_per_trade":  config.RISK_PER_TRADE * 100,
-            }
+            "config": dynamic_config
         })
     except Exception as e:
         last_error = str(e)
@@ -97,52 +105,14 @@ def api_status():
 
 @app.route("/api/config", methods=["GET", "POST"])
 def api_config():
-    """Obtiene o actualiza la configuración dinámica."""
-    config_path = os.path.join(os.path.dirname(__file__), "config.json")
-    
+    """Obtiene o actualiza la configuración en memoria."""
+    global dynamic_config
     if request.method == "POST":
-        new_config = request.get_json()
-        try:
-            with open(config_path, "w") as f:
-                json.dump(new_config, f, indent=2)
-            import importlib
-            import config
-            importlib.reload(config)
-            return jsonify({"ok": True, "message": "Configuración actualizada"})
-        except Exception as e:
-            logger.error(f"Error escribiendo config: {e}")
-            return jsonify({"ok": False, "error": str(e)}), 500
+        new_data = request.get_json()
+        dynamic_config.update(new_data)
+        return jsonify({"ok": True, "message": "Configuración actualizada en memoria"})
     
-    # GET
-    try:
-        if not os.path.exists(config_path):
-            # Intentar escribir un archivo de prueba en una carpeta temporal si la raíz es readonly
-            try:
-                default_config = {
-                    "ema_fast": config.EMA_FAST,
-                    "ema_slow": config.EMA_SLOW,
-                    "rsi_period": config.RSI_PERIOD,
-                    "rsi_long_min": config.RSI_LONG_MIN,
-                    "rsi_short_max": config.RSI_SHORT_MAX,
-                    "rsi_overbought": config.RSI_OVERBOUGHT,
-                    "rsi_oversold": config.RSI_OVERSOLD,
-                    "volume_mult": config.VOLUME_MULT,
-                    "take_profit_pct": config.TAKE_PROFIT_PCT,
-                    "stop_loss_pct": config.STOP_LOSS_PCT,
-                    "risk_per_trade": config.RISK_PER_TRADE,
-                    "capital_usdt": config.CAPITAL_USDT
-                }
-                with open(config_path, "w") as f:
-                    json.dump(default_config, f, indent=2)
-                return jsonify({"ok": True, "config": default_config})
-            except IOError as e:
-                return jsonify({"ok": False, "error": f"Filesystem Read-Only: {str(e)}"}), 500
-            
-        with open(config_path, "r") as f:
-            return jsonify({"ok": True, "config": json.load(f)})
-    except Exception as e:
-        logger.error(f"Error general leyendo config: {e}")
-        return jsonify({"ok": False, "error": f"General Error: {str(e)}"}), 500
+    return jsonify({"ok": True, "config": dynamic_config})
 
 
 @app.route("/api/chart")
@@ -153,6 +123,7 @@ def api_chart():
         chart   = dataframe_to_chart_data(df)
         return jsonify({"ok": True, "data": chart})
     except Exception as e:
+        logger.error(f"Error en /api/chart: {e}", exc_info=True)
         return jsonify({"ok": False, "error": str(e)}), 500
 
 
@@ -243,12 +214,12 @@ def api_reset():
     if bot_running:
         return jsonify({"ok": False, "error": "Detené el bot antes de resetear"}), 400
 
-    risk_manager = RiskManager(initial_capital=config.CAPITAL_USDT)
+    risk_manager = RiskManager(initial_capital=dynamic_config["capital_usdt"])
     last_signal  = {"signal": "FLAT", "timestamp": None}
     scan_count   = 0
 
     if os.path.exists("state.json"):
-        os.remove("state.json")   # ← agregar esto
+        os.remove("state.json")
 
     return jsonify({"ok": True, "message": "Paper trading reseteado"})
 

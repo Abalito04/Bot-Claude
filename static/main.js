@@ -557,11 +557,8 @@ $("btn-stop").addEventListener("click", async () => {
   pollStatus();
 });
 
-// Añadimos el listener de configuración (haciendo doble clic en título indicadores o creando un botón)
-// Usamos el botón de escaneos para abrirlo por ahora o crearemos un botón nuevo. 
-// Vamos a añadir un pequeño icono de engranaje o simplemente engancharlo a un botón existente.
-// Para este ejercicio, lo abriremos con un doble clic en la card de "INDICADORES"
-document.querySelector(".indicators-card h3").addEventListener("dblclick", openConfigModal);
+// Añadimos el listener de configuración (doble clic en título indicadores)
+$("indicators-title").addEventListener("dblclick", openConfigModal);
 
 async function openConfigModal() {
   const res = await apiFetch("/api/config");

@@ -557,8 +557,8 @@ $("btn-stop").addEventListener("click", async () => {
   pollStatus();
 });
 
-// Añadimos el listener de configuración (doble clic en título indicadores)
-$("indicators-title").addEventListener("dblclick", openConfigModal);
+// Botón de configuración
+$("btn-config").addEventListener("click", openConfigModal);
 
 async function openConfigModal() {
   const res = await apiFetch("/api/config");

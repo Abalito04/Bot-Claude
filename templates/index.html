@@ -320,6 +320,43 @@
   <!-- ══════════════ NOTIFICATION TOAST ══════════════ -->
   <div class="toast-container" id="toast-container"></div>
 
+  <!-- ══════════════ MODAL CONFIG ══════════════ -->
+  <div class="modal" id="config-modal">
+    <div class="modal-content">
+      <h3 class="card-title">AJUSTES DE ESTRATEGIA</h3>
+      <form id="config-form">
+        <div class="form-group">
+          <label>EMA Fast</label>
+          <input type="number" name="ema_fast" id="conf-ema-fast">
+        </div>
+        <div class="form-group">
+          <label>EMA Slow</label>
+          <input type="number" name="ema_slow" id="conf-ema-slow">
+        </div>
+        <div class="form-group">
+          <label>RSI Long Min</label>
+          <input type="number" name="rsi_long_min" id="conf-rsi-long">
+        </div>
+        <div class="form-group">
+          <label>RSI Short Max</label>
+          <input type="number" name="rsi_short_max" id="conf-rsi-short">
+        </div>
+        <div class="form-group">
+          <label>Take Profit (%)</label>
+          <input type="number" step="0.001" name="take_profit_pct" id="conf-tp">
+        </div>
+        <div class="form-group">
+          <label>Stop Loss (%)</label>
+          <input type="number" step="0.001" name="stop_loss_pct" id="conf-sl">
+        </div>
+        <div class="btn-row">
+          <button type="button" class="btn" id="btn-cancel-config">CANCELAR</button>
+          <button type="submit" class="btn btn-long">GUARDAR</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
   <script src="/static/main.js"></script>
 </body>
 </html>

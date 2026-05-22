@@ -95,13 +95,26 @@ def api_status():
         return jsonify({"ok": False, "error": str(e)}), 500
 
 
-@app.route("/api/chart")
-def api_chart():
-    """Datos OHLCV + indicadores para el gráfico."""
+@app.route("/api/config", methods=["GET", "POST"])
+def api_config():
+    """Obtiene o actualiza la configuración dinámica."""
+    if request.method == "POST":
+        new_config = request.get_json()
+        try:
+            with open("config.json", "w") as f:
+                json.dump(new_config, f, indent=2)
+            # Recargar configuración global (podría requerir un reload si config.py se cachea)
+            import importlib
+            import config
+            importlib.reload(config)
+            return jsonify({"ok": True, "message": "Configuración actualizada"})
+        except Exception as e:
+            return jsonify({"ok": False, "error": str(e)}), 500
+    
+    # GET
     try:
-        df      = fetch_klines()
-        chart   = dataframe_to_chart_data(df)
-        return jsonify({"ok": True, "data": chart})
+        with open("config.json", "r") as f:
+            return jsonify({"ok": True, "config": json.load(f)})
     except Exception as e:
         return jsonify({"ok": False, "error": str(e)}), 500
 

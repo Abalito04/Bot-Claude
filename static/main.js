@@ -544,6 +544,7 @@ function setCondition(id, met) {
 
 // ── BOT CONTROLS ─────────────────────────────────────────────
 
+// Configuración Modal
 $("btn-start").addEventListener("click", async () => {
   const res = await apiFetch("/api/bot/start", { method: "POST" });
   toast(res.message || "Bot iniciado", res.ok ? "success" : "error");
@@ -555,6 +556,51 @@ $("btn-stop").addEventListener("click", async () => {
   toast(res.message || "Bot detenido", res.ok ? "info" : "error");
   pollStatus();
 });
+
+// Añadimos el listener de configuración (haciendo doble clic en título indicadores o creando un botón)
+// Usamos el botón de escaneos para abrirlo por ahora o crearemos un botón nuevo. 
+// Vamos a añadir un pequeño icono de engranaje o simplemente engancharlo a un botón existente.
+// Para este ejercicio, lo abriremos con un doble clic en la card de "INDICADORES"
+document.querySelector(".indicators-card h3").addEventListener("dblclick", openConfigModal);
+
+async function openConfigModal() {
+  const res = await apiFetch("/api/config");
+  if (!res.ok) return toast("Error cargando config", "error");
+  
+  const c = res.config;
+  $("conf-ema-fast").value = c.ema_fast;
+  $("conf-ema-slow").value = c.ema_slow;
+  $("conf-rsi-long").value = c.rsi_long_min;
+  $("conf-rsi-short").value = c.rsi_short_max;
+  $("conf-tp").value = c.take_profit_pct;
+  $("conf-sl").value = c.stop_loss_pct;
+  
+  $("config-modal").classList.add("open");
+}
+
+$("btn-cancel-config").addEventListener("click", () => $("config-modal").classList.remove("open"));
+
+$("config-form").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const formData = new FormData(e.target);
+  const data = Object.fromEntries(formData.entries());
+  
+  // Convertir tipos
+  for(let k in data) data[k] = parseFloat(data[k]);
+  
+  const res = await apiFetch("/api/config", {
+    method: "POST",
+    body: JSON.stringify(data)
+  });
+  
+  if (res.ok) {
+    toast("Configuración guardada", "success");
+    $("config-modal").classList.remove("open");
+  } else {
+    toast("Error al guardar: " + res.error, "error");
+  }
+});
+
 
 $("btn-long").addEventListener("click", async () => {
   const res = await apiFetch("/api/trade/open", {

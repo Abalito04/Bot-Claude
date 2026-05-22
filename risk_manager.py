@@ -26,6 +26,7 @@ import logging
 
 COMMISSION_PCT = 0.001
 STATE_FILE     = "state.json"
+TRADES_FILE    = "trades.json"
 
 logger = logging.getLogger(__name__)
 
@@ -38,7 +39,7 @@ class RiskManager:
         self.daily_start_capital  = initial_capital
         self.last_reset_date      = date.today()
 
-        self.trade_history        = []
+        self.trade_history        = self.load_trades()
         self.open_position        = None
 
         self.total_trades         = 0
@@ -49,6 +50,21 @@ class RiskManager:
 
         self.consecutive_losses   = 0
         self.pause_until          = None
+
+    def load_trades(self):
+        """Carga el historial de trades desde trades.json."""
+        if os.path.exists(TRADES_FILE):
+            try:
+                with open(TRADES_FILE, "r") as f:
+                    return json.load(f)
+            except:
+                return []
+        return []
+
+    def save_trades(self):
+        """Guarda el historial de trades en trades.json."""
+        with open(TRADES_FILE, "w") as f:
+            json.dump(self.trade_history, f, indent=2)
 
     # ------------------------------------------------------------------
     #  PERSISTENCIA DE ESTADO
@@ -68,7 +84,6 @@ class RiskManager:
             "total_pnl_usdt":      self.total_pnl_usdt,
             "total_fees_usdt":     self.total_fees_usdt,
             "consecutive_losses":  self.consecutive_losses,
-            "trade_history":       self.trade_history,
         }
         try:
             with open(STATE_FILE, "w") as f:
@@ -99,7 +114,6 @@ class RiskManager:
             self.total_pnl_usdt      = state["total_pnl_usdt"]
             self.total_fees_usdt     = state["total_fees_usdt"]
             self.consecutive_losses  = state["consecutive_losses"]
-            self.trade_history       = state["trade_history"]
 
             if self.open_position:
                 logger.warning(
@@ -300,6 +314,7 @@ class RiskManager:
         }
 
         self.trade_history.append(trade_record)
+        self.save_trades()
         self.open_position = None
 
         self.save_state()

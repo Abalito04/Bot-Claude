@@ -119,6 +119,17 @@ def api_config():
         return jsonify({"ok": False, "error": str(e)}), 500
 
 
+@app.route("/api/chart")
+def api_chart():
+    """Datos OHLCV + indicadores para el gráfico."""
+    try:
+        df      = fetch_klines()
+        chart   = dataframe_to_chart_data(df)
+        return jsonify({"ok": True, "data": chart})
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
 @app.route("/api/signal")
 def api_signal():
     """Señal actual de la estrategia."""

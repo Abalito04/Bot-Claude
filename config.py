@@ -55,7 +55,7 @@ VOLUME_SMA      = 20
 VOLUME_MULT     = DYNAMIC["volume_mult"]
 
 # --- Gestión de Riesgo (dinámicos) ---
-CAPITAL_USDT    = 1000.0
+CAPITAL_USDT    = DYNAMIC["capital_usdt"]
 RISK_PER_TRADE  = DYNAMIC["risk_per_trade"]
 TAKE_PROFIT_PCT = DYNAMIC["take_profit_pct"]
 STOP_LOSS_PCT   = DYNAMIC["stop_loss_pct"]

@@ -568,6 +568,7 @@ async function openConfigModal() {
   if (!res.ok) return toast("Error cargando config", "error");
   
   const c = res.config;
+  $("conf-capital").value = c.capital_usdt;
   $("conf-ema-fast").value = c.ema_fast;
   $("conf-ema-slow").value = c.ema_slow;
   $("conf-rsi-long").value = c.rsi_long_min;

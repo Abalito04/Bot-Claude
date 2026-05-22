@@ -9,5 +9,6 @@
   "volume_mult": 1.5,
   "take_profit_pct": 0.015,
   "stop_loss_pct": 0.008,
-  "risk_per_trade": 0.01
+  "risk_per_trade": 0.01,
+  "capital_usdt": 100.0
 }

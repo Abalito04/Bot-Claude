@@ -13,8 +13,20 @@ load_dotenv()
 
 # --- Cargar Configuración Dinámica ---
 def load_dynamic_config():
-    with open("config.json", "r") as f:
-        return json.load(f)
+    config_path = os.path.join(os.path.dirname(__file__), "config.json")
+    if os.path.exists(config_path):
+        with open(config_path, "r") as f:
+            return json.load(f)
+    else:
+        # Fallback si no existe
+        return {
+            "ema_fast": 9, "ema_slow": 21, "rsi_period": 14,
+            "rsi_long_min": 55, "rsi_short_max": 45,
+            "rsi_overbought": 75, "rsi_oversold": 25,
+            "volume_mult": 1.5, "take_profit_pct": 0.015,
+            "stop_loss_pct": 0.008, "risk_per_trade": 0.01,
+            "capital_usdt": 100.0
+        }
 
 DYNAMIC = load_dynamic_config()
 

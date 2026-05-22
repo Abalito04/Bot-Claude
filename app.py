@@ -98,24 +98,47 @@ def api_status():
 @app.route("/api/config", methods=["GET", "POST"])
 def api_config():
     """Obtiene o actualiza la configuración dinámica."""
+    config_path = os.path.join(os.path.dirname(__file__), "config.json")
+    
     if request.method == "POST":
         new_config = request.get_json()
         try:
-            with open("config.json", "w") as f:
+            with open(config_path, "w") as f:
                 json.dump(new_config, f, indent=2)
-            # Recargar configuración global (podría requerir un reload si config.py se cachea)
             import importlib
             import config
             importlib.reload(config)
             return jsonify({"ok": True, "message": "Configuración actualizada"})
         except Exception as e:
+            logger.error(f"Error escribiendo config: {e}")
             return jsonify({"ok": False, "error": str(e)}), 500
     
     # GET
     try:
-        with open("config.json", "r") as f:
+        if not os.path.exists(config_path):
+            # Si no existe, crear uno por defecto basado en los valores actuales
+            default_config = {
+                "ema_fast": config.EMA_FAST,
+                "ema_slow": config.EMA_SLOW,
+                "rsi_period": config.RSI_PERIOD,
+                "rsi_long_min": config.RSI_LONG_MIN,
+                "rsi_short_max": config.RSI_SHORT_MAX,
+                "rsi_overbought": config.RSI_OVERBOUGHT,
+                "rsi_oversold": config.RSI_OVERSOLD,
+                "volume_mult": config.VOLUME_MULT,
+                "take_profit_pct": config.TAKE_PROFIT_PCT,
+                "stop_loss_pct": config.STOP_LOSS_PCT,
+                "risk_per_trade": config.RISK_PER_TRADE,
+                "capital_usdt": config.CAPITAL_USDT
+            }
+            with open(config_path, "w") as f:
+                json.dump(default_config, f, indent=2)
+            return jsonify({"ok": True, "config": default_config})
+            
+        with open(config_path, "r") as f:
             return jsonify({"ok": True, "config": json.load(f)})
     except Exception as e:
+        logger.error(f"Error leyendo config: {e}")
         return jsonify({"ok": False, "error": str(e)}), 500
 
 

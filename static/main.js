@@ -558,9 +558,13 @@ $("btn-stop").addEventListener("click", async () => {
 });
 
 // Botón de configuración
-$("btn-config").addEventListener("click", openConfigModal);
+$("btn-config").addEventListener("click", () => {
+    console.log("Botón CONFIG clickeado");
+    openConfigModal();
+});
 
 async function openConfigModal() {
+  console.log("Abriendo modal...");
   const res = await apiFetch("/api/config");
   if (!res.ok) return toast("Error cargando config", "error");
   

@@ -574,21 +574,26 @@ async function openConfigModal() {
   $("conf-ema-slow").value = c.ema_slow;
   $("conf-rsi-long").value = c.rsi_long_min;
   $("conf-rsi-short").value = c.rsi_short_max;
-  $("conf-tp").value = c.take_profit_pct;
-  $("conf-sl").value = c.stop_loss_pct;
+  // Convertir decimales a porcentajes para la UI
+  $("conf-tp").value = (c.take_profit_pct * 100).toFixed(2);
+  $("conf-sl").value = (c.stop_loss_pct * 100).toFixed(2);
   
   $("config-modal").classList.add("open");
 }
-
-$("btn-cancel-config").addEventListener("click", () => $("config-modal").classList.remove("open"));
 
 $("config-form").addEventListener("submit", async (e) => {
   e.preventDefault();
   const formData = new FormData(e.target);
   const data = Object.fromEntries(formData.entries());
   
-  // Convertir tipos
-  for(let k in data) data[k] = parseFloat(data[k]);
+  // Convertir tipos y porcentajes a decimales
+  for(let k in data) {
+    let val = parseFloat(data[k]);
+    if (k === "take_profit_pct" || k === "stop_loss_pct") {
+        val = val / 100;
+    }
+    data[k] = val;
+  }
   
   const res = await apiFetch("/api/config", {
     method: "POST",

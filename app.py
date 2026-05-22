@@ -116,30 +116,33 @@ def api_config():
     # GET
     try:
         if not os.path.exists(config_path):
-            # Si no existe, crear uno por defecto basado en los valores actuales
-            default_config = {
-                "ema_fast": config.EMA_FAST,
-                "ema_slow": config.EMA_SLOW,
-                "rsi_period": config.RSI_PERIOD,
-                "rsi_long_min": config.RSI_LONG_MIN,
-                "rsi_short_max": config.RSI_SHORT_MAX,
-                "rsi_overbought": config.RSI_OVERBOUGHT,
-                "rsi_oversold": config.RSI_OVERSOLD,
-                "volume_mult": config.VOLUME_MULT,
-                "take_profit_pct": config.TAKE_PROFIT_PCT,
-                "stop_loss_pct": config.STOP_LOSS_PCT,
-                "risk_per_trade": config.RISK_PER_TRADE,
-                "capital_usdt": config.CAPITAL_USDT
-            }
-            with open(config_path, "w") as f:
-                json.dump(default_config, f, indent=2)
-            return jsonify({"ok": True, "config": default_config})
+            # Intentar escribir un archivo de prueba en una carpeta temporal si la raíz es readonly
+            try:
+                default_config = {
+                    "ema_fast": config.EMA_FAST,
+                    "ema_slow": config.EMA_SLOW,
+                    "rsi_period": config.RSI_PERIOD,
+                    "rsi_long_min": config.RSI_LONG_MIN,
+                    "rsi_short_max": config.RSI_SHORT_MAX,
+                    "rsi_overbought": config.RSI_OVERBOUGHT,
+                    "rsi_oversold": config.RSI_OVERSOLD,
+                    "volume_mult": config.VOLUME_MULT,
+                    "take_profit_pct": config.TAKE_PROFIT_PCT,
+                    "stop_loss_pct": config.STOP_LOSS_PCT,
+                    "risk_per_trade": config.RISK_PER_TRADE,
+                    "capital_usdt": config.CAPITAL_USDT
+                }
+                with open(config_path, "w") as f:
+                    json.dump(default_config, f, indent=2)
+                return jsonify({"ok": True, "config": default_config})
+            except IOError as e:
+                return jsonify({"ok": False, "error": f"Filesystem Read-Only: {str(e)}"}), 500
             
         with open(config_path, "r") as f:
             return jsonify({"ok": True, "config": json.load(f)})
     except Exception as e:
-        logger.error(f"Error leyendo config: {e}")
-        return jsonify({"ok": False, "error": str(e)}), 500
+        logger.error(f"Error general leyendo config: {e}")
+        return jsonify({"ok": False, "error": f"General Error: {str(e)}"}), 500
 
 
 @app.route("/api/chart")

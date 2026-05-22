@@ -577,6 +577,7 @@ async function openConfigModal() {
   // Convertir decimales a porcentajes para la UI
   $("conf-tp").value = (c.take_profit_pct * 100).toFixed(2);
   $("conf-sl").value = (c.stop_loss_pct * 100).toFixed(2);
+  $("conf-daily-loss").value = (c.max_daily_loss * 100).toFixed(2);
   
   $("config-modal").classList.add("open");
 }
@@ -589,7 +590,7 @@ $("config-form").addEventListener("submit", async (e) => {
   // Convertir tipos y porcentajes a decimales
   for(let k in data) {
     let val = parseFloat(data[k]);
-    if (k === "take_profit_pct" || k === "stop_loss_pct") {
+    if (k === "take_profit_pct" || k === "stop_loss_pct" || k === "max_daily_loss") {
         val = val / 100;
     }
     data[k] = val;

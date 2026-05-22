@@ -324,7 +324,7 @@ class RiskManager:
     #  ESTADÍSTICAS
     # ------------------------------------------------------------------
 
-    def get_stats(self) -> dict:
+    def get_stats(self, dynamic_config: dict) -> dict:
         self._check_daily_reset()
 
         win_rate   = (self.winning_trades / self.total_trades * 100
@@ -333,6 +333,8 @@ class RiskManager:
         daily_loss = (self.daily_start_capital - self.current_capital) / self.daily_start_capital
         daily_pnl  = self.current_capital - self.daily_start_capital
         drawdown   = (self.peak_capital - self.current_capital) / self.peak_capital
+
+        rr_ratio = dynamic_config["take_profit_pct"] / dynamic_config["stop_loss_pct"]
 
         return {
             "capital_initial":        round(self.initial_capital, 2),
@@ -343,7 +345,7 @@ class RiskManager:
             "total_fees_usdt":        round(self.total_fees_usdt, 4),
             "daily_pnl_usdt":         round(daily_pnl, 2),
             "daily_pnl_pct":          round(-daily_loss * 100, 3),
-            "daily_limit_pct":        config.MAX_DAILY_LOSS * 100,
+            "daily_limit_pct":        dynamic_config["max_daily_loss"] * 100,
             "drawdown_pct":           round(drawdown * 100, 3),
             "total_trades":           self.total_trades,
             "winning_trades":         self.winning_trades,
@@ -351,7 +353,7 @@ class RiskManager:
             "win_rate":               round(win_rate, 1),
             "consecutive_losses":     self.consecutive_losses,
             "circuit_breaker_active": self.pause_until is not None and datetime.now() < self.pause_until,
-            "risk_reward_ratio":      f"1:{config.TAKE_PROFIT_PCT / config.STOP_LOSS_PCT:.2f}",
+            "risk_reward_ratio":      f"1:{rr_ratio:.2f}",
             "open_position":          self.open_position,
             "trade_history":          self.trade_history[-20:],
         }

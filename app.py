@@ -47,6 +47,7 @@ dynamic_config = {
     "volume_mult": config.VOLUME_MULT,
     "take_profit_pct": config.TAKE_PROFIT_PCT,
     "stop_loss_pct": config.STOP_LOSS_PCT,
+    "max_daily_loss": config.MAX_DAILY_LOSS,
     "risk_per_trade": config.RISK_PER_TRADE,
     "capital_usdt": config.CAPITAL_USDT
 }
@@ -79,7 +80,7 @@ def api_status():
     try:
         price  = fetch_current_price()
         stats  = fetch_24h_stats()
-        rm_stats = risk_manager.get_stats()
+        rm_stats = risk_manager.get_stats(dynamic_config)
 
         return jsonify({
             "ok":          True,

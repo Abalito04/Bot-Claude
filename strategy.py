@@ -30,7 +30,17 @@
 import pandas as pd
 import numpy as np
 import config
+import joblib
+import os
 
+# Intentar cargar el modelo de ML si existe
+MODEL_PATH = "trading_model.pkl"
+model = None
+if os.path.exists(MODEL_PATH):
+    try:
+        model = joblib.load(MODEL_PATH)
+    except:
+        model = None
 
 # ------------------------------------------------------------------
 #  CÁLCULO DE INDICADORES
@@ -98,6 +108,39 @@ def add_indicators(df: pd.DataFrame) -> pd.DataFrame:
     return df
 
 
+def get_ml_prediction(row, df_recent):
+    """Retorna la probabilidad de éxito según el modelo de ML."""
+    if model is None:
+        return 0.5
+    
+    # Calcular características de volatilidad y volumen (basadas en histórico reciente)
+    recent_range = (df_recent["high"] - df_recent["low"]) / df_recent["close"]
+    volatility = recent_range.tail(10).mean()
+    
+    vol_change = 0
+    if len(df_recent) >= 6:
+        old_vol = df_recent["volume"].iloc[-6]
+        if old_vol > 0:
+            vol_change = (df_recent["volume"].iloc[-1] - old_vol) / old_vol
+
+    # Mismas características que en ml_trainer.py
+    features = pd.DataFrame([{
+        "rsi":          row["rsi"],
+        "macd_hist":    row["macd_hist"],
+        "volume_ratio": row["volume_ratio"],
+        "ema_dist":     (row["ema_fast"] - row["ema_slow"]) / row["ema_slow"],
+        "price_dist_ema": (row["close"] - row["ema_fast"]) / row["ema_fast"],
+        "volatility":   volatility,
+        "vol_change":   vol_change
+    }])
+    
+    try:
+        prob = model.predict_proba(features)[0][1]
+        return float(prob)
+    except:
+        return 0.5
+
+
 # ------------------------------------------------------------------
 #  GENERACIÓN DE SEÑALES
 # ------------------------------------------------------------------
@@ -110,21 +153,12 @@ SIGNAL_FLAT  = "FLAT"
 def generate_signal(df: pd.DataFrame) -> dict:
     """
     Evalúa la última vela completa y retorna la señal de trading.
-
-    Returns
-    -------
-    dict con:
-        signal      : 'LONG' | 'SHORT' | 'FLAT'
-        conditions  : dict con cada condición evaluada (True/False)
-        indicators  : valores actuales de los indicadores
-        timestamp   : timestamp de la vela analizada
+    Ahora incluye un filtro de Machine Learning avanzado.
     """
-    df = add_indicators(df)
-
-    # Usamos la penúltima vela (última completa; la última puede estar en formación)
-    row = df.iloc[-2]
-    prev = df.iloc[-3]
-
+    df_with_inds = add_indicators(df)
+    row = df_with_inds.iloc[-2]
+    
+    # 1. Reglas Técnicas (Momentum)
     conditions_long = {
         "golden_cross":     bool(row["golden_cross"]),
         "rsi_above_min":    bool(row["rsi"] > config.RSI_LONG_MIN),
@@ -133,43 +167,35 @@ def generate_signal(df: pd.DataFrame) -> dict:
         "macd_bullish":     bool(row["macd"] > row["macd_signal"]),
     }
 
-    conditions_short = {
-        "death_cross":      bool(row["death_cross"]),
-        "rsi_below_max":    bool(row["rsi"] < config.RSI_SHORT_MAX),
-        "rsi_not_oversold": bool(row["rsi"] > config.RSI_OVERSOLD),
-        "volume_surge":     bool(row["volume_ratio"] >= config.VOLUME_MULT),
-        "macd_bearish":     bool(row["macd"] < row["macd_signal"]),
-    }
-
-    all_long  = all(conditions_long.values())
-    all_short = all(conditions_short.values())
-
-    if all_long:
+    rules_pass = all(conditions_long.values())
+    
+    # 2. Filtro de Machine Learning (usando el DataFrame completo para contexto)
+    ml_prob = get_ml_prediction(row, df_with_inds.iloc[:-1])
+    
+    # Umbral dinámico: si las reglas técnicas son muy fuertes, bajamos un poco la exigencia de ML
+    ml_threshold = 0.52 if rules_pass else 0.65
+    
+    ml_pass = ml_prob >= ml_threshold
+    
+    if rules_pass and ml_pass:
         signal = SIGNAL_LONG
-        active_conditions = conditions_long
-    elif all_short:
-        signal = SIGNAL_SHORT
-        active_conditions = conditions_short
+    elif ml_prob > 0.70: # Si la IA está MUY segura, entramos aunque no haya Golden Cross
+        signal = SIGNAL_LONG
     else:
         signal = SIGNAL_FLAT
-        active_conditions = {**conditions_long, **conditions_short}
 
     return {
         "signal": signal,
-        "conditions_long":  conditions_long,
-        "conditions_short": conditions_short,
+        "ml_confidence": round(ml_prob, 4),
+        "rules_pass": rules_pass,
         "indicators": {
-            "ema_fast":     round(float(row["ema_fast"]), 4),
-            "ema_slow":     round(float(row["ema_slow"]), 4),
-            "rsi":          round(float(row["rsi"]), 2),
-            "macd":         round(float(row["macd"]), 4),
-            "macd_signal":  round(float(row["macd_signal"]), 4),
-            "macd_hist":    round(float(row["macd_hist"]), 4),
+            "rsi": round(float(row["rsi"]), 2),
             "volume_ratio": round(float(row["volume_ratio"]), 2),
-            "close":        round(float(row["close"]), 4),
+            "close": round(float(row["close"]), 4),
         },
         "timestamp": str(row["timestamp"]),
     }
+
 
 
 # ------------------------------------------------------------------

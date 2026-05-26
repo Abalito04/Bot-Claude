@@ -150,46 +150,72 @@ SIGNAL_SHORT = "SHORT"
 SIGNAL_FLAT  = "FLAT"
 
 
-def generate_signal(df: pd.DataFrame) -> dict:
+def generate_signal(df: pd.DataFrame, cfg: dict = None) -> dict:
     """
     Evalúa la última vela completa y retorna la señal de trading.
     Ahora incluye un filtro de Machine Learning avanzado.
     """
+    # Usar config dinámica si se provee, sino la de config.py
+    rsi_long_min = cfg.get("rsi_long_min", config.RSI_LONG_MIN) if cfg else config.RSI_LONG_MIN
+    rsi_short_max = cfg.get("rsi_short_max", config.RSI_SHORT_MAX) if cfg else config.RSI_SHORT_MAX
+    rsi_overbought = cfg.get("rsi_overbought", config.RSI_OVERBOUGHT) if cfg else config.RSI_OVERBOUGHT
+    rsi_oversold = cfg.get("rsi_oversold", config.RSI_OVERSOLD) if cfg else config.RSI_OVERSOLD
+    volume_mult = cfg.get("volume_mult", config.VOLUME_MULT) if cfg else config.VOLUME_MULT
+
     df_with_inds = add_indicators(df)
     row = df_with_inds.iloc[-2]
     
     # 1. Reglas Técnicas (Momentum)
     conditions_long = {
         "golden_cross":     bool(row["golden_cross"]),
-        "rsi_above_min":    bool(row["rsi"] > config.RSI_LONG_MIN),
-        "rsi_not_overbought": bool(row["rsi"] < config.RSI_OVERBOUGHT),
-        "volume_surge":     bool(row["volume_ratio"] >= config.VOLUME_MULT),
+        "rsi_above_min":    bool(row["rsi"] > rsi_long_min),
+        "rsi_not_overbought": bool(row["rsi"] < rsi_overbought),
+        "volume_surge":     bool(row["volume_ratio"] >= volume_mult),
         "macd_bullish":     bool(row["macd"] > row["macd_signal"]),
     }
 
-    rules_pass = all(conditions_long.values())
+    conditions_short = {
+        "death_cross":      bool(row["death_cross"]),
+        "rsi_below_max":    bool(row["rsi"] < rsi_short_max),
+        "rsi_not_oversold":  bool(row["rsi"] > rsi_oversold),
+        "volume_surge":     bool(row["volume_ratio"] >= volume_mult),
+        "macd_bearish":     bool(row["macd"] < row["macd_signal"]),
+    }
+
+    rules_pass_long = all(conditions_long.values())
+    rules_pass_short = all(conditions_short.values())
     
     # 2. Filtro de Machine Learning (usando el DataFrame completo para contexto)
     ml_prob = get_ml_prediction(row, df_with_inds.iloc[:-1])
     
     # Umbral dinámico: si las reglas técnicas son muy fuertes, bajamos un poco la exigencia de ML
-    ml_threshold = 0.52 if rules_pass else 0.65
+    ml_threshold_long = 0.52 if rules_pass_long else 0.65
+    ml_threshold_short = 0.48 if rules_pass_short else 0.35 # Inverso para short si prob es 0..1 para LONG
     
-    ml_pass = ml_prob >= ml_threshold
+    # Nota: El modelo parece estar entrenado para predecir éxito de LONG.
+    # Si ml_prob es bajo, podría indicar éxito de SHORT, pero depende de cómo se entrenó.
+    # Por ahora mantendremos la lógica original para LONG y una simplificada para SHORT.
     
-    if rules_pass and ml_pass:
+    signal = SIGNAL_FLAT
+    if rules_pass_long and ml_prob >= ml_threshold_long:
         signal = SIGNAL_LONG
-    elif ml_prob > 0.70: # Si la IA está MUY segura, entramos aunque no haya Golden Cross
+    elif ml_prob > 0.70:
         signal = SIGNAL_LONG
-    else:
-        signal = SIGNAL_FLAT
+    elif rules_pass_short:
+        # Si no tenemos un modelo específico para SHORT, confiamos en las reglas técnicas
+        signal = SIGNAL_SHORT
 
     return {
         "signal": signal,
         "ml_confidence": round(ml_prob, 4),
-        "rules_pass": rules_pass,
+        "conditions_long": conditions_long,
+        "conditions_short": conditions_short,
         "indicators": {
+            "ema_fast": round(float(row["ema_fast"]), 4),
+            "ema_slow": round(float(row["ema_slow"]), 4),
             "rsi": round(float(row["rsi"]), 2),
+            "macd": round(float(row["macd"]), 4),
+            "macd_signal": round(float(row["macd_signal"]), 4),
             "volume_ratio": round(float(row["volume_ratio"]), 2),
             "close": round(float(row["close"]), 4),
         },

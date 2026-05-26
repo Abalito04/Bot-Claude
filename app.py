@@ -133,7 +133,7 @@ def api_signal():
     """Señal actual de la estrategia."""
     try:
         df     = fetch_klines()
-        signal = generate_signal(df)
+        signal = generate_signal(df, dynamic_config)
         return jsonify({"ok": True, "signal": signal})
     except Exception as e:
         return jsonify({"ok": False, "error": str(e)}), 500
@@ -241,7 +241,7 @@ def bot_loop():
     while bot_running:
         try:
             df     = fetch_klines()
-            signal = generate_signal(df)
+            signal = generate_signal(df, dynamic_config)
             price  = fetch_current_price()
             now    = datetime.now(timezone.utc).isoformat()
 

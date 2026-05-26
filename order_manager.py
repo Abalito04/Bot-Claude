@@ -38,8 +38,19 @@ def _round_step(value: float, step: float) -> float:
     Redondea 'value' al múltiplo de 'step' más cercano hacia abajo.
     Binance rechaza órdenes que no cumplen con el stepSize/tickSize.
     """
+    if not step or step <= 0:
+        return value
     precision = int(round(-math.log(step, 10), 0)) if step < 1 else 0
-    return round(math.floor(value / step) * step, precision)
+    # Usar un pequeño epsilon para evitar errores de punto flotante
+    return round(math.floor((value + 1e-10) / step) * step, precision)
+
+
+def format_value(value: float, step: float) -> str:
+    """Formatea un valor como string con la precisión correcta para Binance."""
+    if not step or step <= 0:
+        return str(value)
+    precision = int(round(-math.log(step, 10), 0)) if step < 1 else 0
+    return "{:0.{}f}".format(value, precision)
 
 
 def get_symbol_filters() -> dict:
@@ -67,23 +78,18 @@ def get_symbol_filters() -> dict:
 def place_market_order(side: str, quantity: float) -> dict:
     """
     Coloca una orden MARKET de entrada/salida.
-
-    Parameters
-    ----------
-    side     : 'BUY' | 'SELL'
-    quantity : cantidad de SOL (ya redondeada al stepSize)
-
-    Returns
-    -------
-    dict con la respuesta de Binance (orderId, status, fills, etc.)
     """
+    filters = get_symbol_filters()
+    qty_str = format_value(quantity, filters.get("step_size", 0.01))
+
     params = {
-        "symbol":   config.SYMBOL,
-        "side":     side,
-        "type":     "MARKET",
-        "quantity": quantity,
+        "symbol":     config.SYMBOL,
+        "side":       side,
+        "type":       "MARKET",
+        "quantity":   qty_str,
+        "recvWindow": 10000
     }
-    logger.info(f"ORDER MARKET {side} {quantity} {config.SYMBOL}")
+    logger.info(f"ORDER MARKET {side} {qty_str} {config.SYMBOL}")
     response = _post_private("/api/v3/order", params)
     logger.info(f"Respuesta Binance: {response}")
     return response
@@ -93,23 +99,21 @@ def place_limit_order(side: str, quantity: float, price: float,
                       time_in_force: str = "GTC") -> dict:
     """
     Coloca una orden LIMIT.
-
-    Parameters
-    ----------
-    side           : 'BUY' | 'SELL'
-    quantity       : cantidad de SOL
-    price          : precio límite
-    time_in_force  : 'GTC' (Good Till Cancel) por defecto
     """
+    filters = get_symbol_filters()
+    qty_str = format_value(quantity, filters.get("step_size", 0.01))
+    prc_str = format_value(price, filters.get("tick_size", 0.01))
+
     params = {
         "symbol":      config.SYMBOL,
         "side":        side,
         "type":        "LIMIT",
-        "quantity":    quantity,
-        "price":       price,
+        "quantity":    qty_str,
+        "price":       prc_str,
         "timeInForce": time_in_force,
+        "recvWindow":  10000
     }
-    logger.info(f"ORDER LIMIT {side} {quantity} @ {price}")
+    logger.info(f"ORDER LIMIT {side} {qty_str} @ {prc_str}")
     return _post_private("/api/v3/order", params)
 
 
@@ -117,33 +121,29 @@ def place_oco_order(side: str, quantity: float,
                     price: float, stop_price: float,
                     stop_limit_price: float) -> dict:
     """
-    Coloca una orden OCO (One-Cancels-the-Other) para TP + SL simultáneo.
-    Binance cancela automáticamente la orden restante cuando una se ejecuta.
-
-    Parameters
-    ----------
-    side             : 'BUY' (para cerrar SHORT) | 'SELL' (para cerrar LONG)
-    quantity         : cantidad de SOL a liquidar
-    price            : precio LIMIT del take profit
-    stop_price       : precio de activación del stop loss
-    stop_limit_price : precio LIMIT del stop loss (ligeramente por debajo del stop)
-
-    Nota: En un OCO de SELL:
-        price          = take profit (más alto que precio actual)
-        stop_price     = trigger del SL (más bajo que precio actual)
-        stop_limit_price = precio fill del SL (ligeramente menor al stop)
+    Coloca una orden OCO para TP + SL simultáneo.
     """
+    filters = get_symbol_filters()
+    step = filters.get("step_size", 0.01)
+    tick = filters.get("tick_size", 0.01)
+
+    qty_str = format_value(quantity, step)
+    prc_str = format_value(price, tick)
+    stp_str = format_value(stop_price, tick)
+    slm_str = format_value(stop_limit_price, tick)
+
     params = {
-        "symbol":            config.SYMBOL,
-        "side":              side,
-        "quantity":          quantity,
-        "price":             price,           # TP limit price
-        "stopPrice":         stop_price,      # SL trigger
-        "stopLimitPrice":    stop_limit_price,# SL fill price
+        "symbol":               config.SYMBOL,
+        "side":                 side,
+        "quantity":             qty_str,
+        "price":                prc_str,           # TP limit price
+        "stopPrice":            stp_str,           # SL trigger
+        "stopLimitPrice":       slm_str,           # SL fill price
         "stopLimitTimeInForce": "GTC",
+        "recvWindow":           10000
     }
     logger.info(
-        f"ORDER OCO {side} {quantity} | TP: {price} | SL trigger: {stop_price} | SL limit: {stop_limit_price}"
+        f"ORDER OCO {side} {qty_str} | TP: {prc_str} | SL trigger: {stp_str} | SL limit: {slm_str}"
     )
     return _post_private("/api/v3/order/oco", params)
 
@@ -210,9 +210,9 @@ def open_position(side: str, usdt_capital: float) -> dict:
     dict con todos los detalles de la posición abierta
     """
     filters = get_symbol_filters()
-    step    = filters.get("step_size", 0.01)
-    tick    = filters.get("tick_size", 0.01)
-    min_qty = filters.get("min_qty",   0.01)
+    step    = float(filters.get("step_size", 0.01))
+    tick    = float(filters.get("tick_size", 0.01))
+    min_qty = float(filters.get("min_qty",   0.01))
 
     current_price = fetch_current_price()
 
@@ -228,7 +228,7 @@ def open_position(side: str, usdt_capital: float) -> dict:
         )
 
     notional = quantity * current_price
-    min_not  = filters.get("min_notional", 5.0)
+    min_not  = float(filters.get("min_notional", 5.0))
     if notional < min_not:
         raise ValueError(f"Valor nocional {notional:.2f} USDT < mínimo {min_not} USDT")
 

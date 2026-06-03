@@ -1,19 +1,18 @@
 # 🧠 Bot-Claude
 
-Conversational AI chatbot powered by **Anthropic's Claude API** with a simple web interface.
+Algorithmic **trading bot** powered by **Anthropic's Claude AI** for market analysis and automated trade decision-making.
 
 ## ✨ Features
 
-- Conversational AI using Claude API (Anthropic)
-- Context-aware multi-turn conversations
-- Clean web chat interface
-- Python/Flask backend
+- AI-powered market analysis using Claude API (Anthropic)
+- Automated trading signal generation
+- Python backend
 
 ## 🛠️ Tech Stack
 
-- **Python** · Flask
+- **Python**
 - **Anthropic Claude API**
-- **HTML/CSS/JavaScript**
+- **ccxt / Binance API** *(if applicable)*
 
 ## 🚀 Getting Started
 
@@ -25,13 +24,17 @@ cd Bot-Claude
 # Install dependencies
 pip install -r requirements.txt
 
-# Set your Claude API key
-export ANTHROPIC_API_KEY=your_api_key_here
+# Set your API keys
+export ANTHROPIC_API_KEY=your_claude_key
 
-# Run the app
-python app.py
+# Run the bot
+python main.py
 ```
+
+## ⚠️ Disclaimer
+
+This bot is for educational purposes. Cryptocurrency trading involves significant risk. Use at your own risk.
 
 ## 📄 License
 
-MIT — feel free to use and adapt.
+MIT
